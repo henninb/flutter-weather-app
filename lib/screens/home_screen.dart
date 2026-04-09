@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../config/protected_endpoints.dart';
 import '../widgets/custom_api_section.dart';
+import 'protected_api_screen.dart';
 
 /// HUMAN-protected API only (no Open-Meteo).
 class HomeScreen extends StatefulWidget {
@@ -17,6 +19,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1923),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => const ProtectedApiScreen(),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFF1A2A3A),
+        foregroundColor: const Color(0xFF4FC3F7),
+        icon: const Icon(Icons.api_outlined),
+        label: const Text('Other API'),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -55,7 +70,10 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 20),
               _buildUaToggle(),
               const SizedBox(height: 20),
-              CustomApiSection(spoofUserAgent: _spoofUserAgent),
+              CustomApiSection(
+                endpoint: protectedEndpointById(kWeatherEndpointId),
+                spoofUserAgent: _spoofUserAgent,
+              ),
               const SizedBox(height: 24),
               Text(
                 'HUMAN Bot Defender',

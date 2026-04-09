@@ -35,7 +35,7 @@ class HumanService {
         <String, dynamic>{'appId': kHumanSecurityAppId},
       );
       _nativeConfigureSucceeded = true;
-      logLine('collector: native SDK configured (appId=$kHumanSecurityAppId)');
+      _logHumanAppId('native SDK configured');
     } catch (e, st) {
       logLine('collector: humanConfigure failed: $e');
       developer.log(
@@ -54,6 +54,10 @@ class HumanService {
     developer.log(message, name: _logName);
   }
 
+  static void _logHumanAppId(String context) {
+    logLine('collector: HUMAN_APP_ID=$kHumanSecurityAppId — $context');
+  }
+
   /// Value of `X-PX-AUTHORIZATION` from [headers], or null if missing (case-insensitive key).
   static String? pxAuthorizationValue(Map<String, String> headers) {
     for (final e in headers.entries) {
@@ -66,9 +70,9 @@ class HumanService {
 
   /// Logs the PX auth header. In debug, logs the raw value; always logs [level] semantics.
   ///
-  /// Mobile SDK format is `{level}:{payload}`. The leading digit is **not** a token “version”:
-  /// it is a status code (Mobile SDK spec). `2:` means **Collector connection error** — not a
-  /// healthy scored risk token; debug ATS / network reachability to Collector (`*.perimeterx.net`).
+  /// Mobile SDK format is `{level}:{payload}`. For level **2**, if the base64 payload decodes to
+  /// JSON with **h, t, u, v**, we treat that as a **healthy** collector token (see
+  /// [_logPxLevel2PayloadShape]).
   static void _logPxAuthorizationValue(Map<String, String> map) {
     final v = pxAuthorizationValue(map);
     if (v == null || v.isEmpty) {
@@ -107,10 +111,6 @@ class HumanService {
         );
         break;
       case 2:
-        logLine(
-          'collector: X-PX-AUTHORIZATION level 2 = Collector connection / degraded state (not a full scored token). '
-          'Debug network, ATS, SSL to Collector (e.g. *.perimeterx.net); v3+ may also use X-PX-HELLO.',
-        );
         _logPxLevel2PayloadShape(value, i);
         break;
       case 3:
@@ -130,28 +130,42 @@ class HumanService {
     }
   }
 
-  /// If payload after `2:` is base64 JSON with `u`/`v`/`t`/`h`, log that shape (debug only).
+  /// Decodes base64 JSON after `2:`; if keys **h, t, u, v** are all present, logs a healthy token.
   static void _logPxLevel2PayloadShape(String fullValue, int colonIndex) {
-    if (!kDebugMode) {
-      return;
-    }
     final payload = fullValue.substring(colonIndex + 1);
     if (payload.isEmpty) {
+      logLine(
+        'collector: X-PX-AUTHORIZATION level 2 — empty payload after `2:`',
+      );
       return;
     }
     try {
       final bytes = base64Decode(payload);
       final obj = json.decode(utf8.decode(bytes));
       if (obj is Map) {
-        final keys = obj.keys.map((k) => k.toString()).toList()..sort();
-        logLine(
-          'collector: X-PX-AUTHORIZATION level-2 payload decodes to JSON keys: ${keys.join(", ")} '
-          '(SDK still labels this level 2 — not a healthy scored token)',
-        );
+        final keySet = obj.keys.map((k) => k.toString()).toSet();
+        final sorted = keySet.toList()..sort();
+        final healthy = const {'h', 't', 'u', 'v'}.every(keySet.contains);
+        if (healthy) {
+          logLine(
+            'collector: X-PX-AUTHORIZATION level-2 payload decodes to JSON keys: '
+            '${sorted.join(", ")} — indicates a healthy token',
+          );
+        } else {
+          logLine(
+            'collector: X-PX-AUTHORIZATION level-2 payload decodes to JSON keys: '
+            '${sorted.join(", ")} — expected h, t, u, v for a healthy token; check Collector, ATS, VPN',
+          );
+        }
+        return;
       }
     } catch (_) {
-      // Ignore; payload shape varies by SDK version.
+      // Payload shape varies by SDK version.
     }
+    logLine(
+      'collector: X-PX-AUTHORIZATION level 2 — payload not decodable as base64 JSON; '
+      'debug network, ATS, SSL to Collector (*.perimeterx.net); v3+ may also use X-PX-HELLO',
+    );
   }
 
   /// v3+ may send connection/pinning detail here (codes 2/3 etc.); pair with X-PX-AUTHORIZATION level 2 debugging.
@@ -176,6 +190,7 @@ class HumanService {
 
   /// Matches docs: `invokeMethod('humanGetHeaders')` → JSON string of header map.
   static Future<Map<String, String>> getHeaders() async {
+    _logHumanAppId('humanGetHeaders');
     logLine('collector: invoking humanGetHeaders (native BD.headersForURLRequest)');
     try {
       final String? headersJson = await _channel
@@ -240,6 +255,7 @@ class HumanService {
   ///
   /// Returns `"solved"`, `"cancelled"`, or `"false"`.
   static Future<String> handleBlockedResponse(http.Response response) async {
+    _logHumanAppId('humanHandleResponse');
     if (response.statusCode == 403) {
       _log403BodyForPaste(response);
     }

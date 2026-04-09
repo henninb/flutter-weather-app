@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+
+import '../config/protected_endpoints.dart';
 import '../models/wmo_codes.dart';
-import '../services/custom_weather_service.dart';
+import '../services/protected_api_service.dart';
 
 class CustomApiSection extends StatefulWidget {
   final bool spoofUserAgent;
+  final ProtectedEndpoint endpoint;
 
-  const CustomApiSection({super.key, this.spoofUserAgent = false});
+  const CustomApiSection({
+    super.key,
+    required this.endpoint,
+    this.spoofUserAgent = false,
+  });
 
   @override
   State<CustomApiSection> createState() => _CustomApiSectionState();
@@ -17,20 +24,30 @@ class _CustomApiSectionState extends State<CustomApiSection> {
   @override
   void initState() {
     super.initState();
-    _future = CustomWeatherService.fetch(spoofUserAgent: widget.spoofUserAgent);
+    _future = ProtectedApiService.fetchJson(
+      url: widget.endpoint.uri,
+      spoofUserAgent: widget.spoofUserAgent,
+    );
   }
 
   @override
   void didUpdateWidget(covariant CustomApiSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.spoofUserAgent != widget.spoofUserAgent) {
-      _future = CustomWeatherService.fetch(spoofUserAgent: widget.spoofUserAgent);
+    if (oldWidget.spoofUserAgent != widget.spoofUserAgent ||
+        oldWidget.endpoint.id != widget.endpoint.id) {
+      _future = ProtectedApiService.fetchJson(
+        url: widget.endpoint.uri,
+        spoofUserAgent: widget.spoofUserAgent,
+      );
     }
   }
 
   void refresh() {
     setState(() {
-      _future = CustomWeatherService.fetch(spoofUserAgent: widget.spoofUserAgent);
+      _future = ProtectedApiService.fetchJson(
+      url: widget.endpoint.uri,
+      spoofUserAgent: widget.spoofUserAgent,
+    );
     });
   }
 

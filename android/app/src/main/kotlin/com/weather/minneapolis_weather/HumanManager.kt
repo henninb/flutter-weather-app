@@ -40,6 +40,7 @@ class HumanManager {
                 return
             }
             this.appId = appId
+            Log.i(TAG, "HUMAN_APP_ID=$appId")
             if (didStartSdk) {
                 Log.i(TAG, "humanConfigure: SDK already started, appId=$appId")
                 return
@@ -55,7 +56,7 @@ class HumanManager {
                 )
                 HumanSecurity.start(application, appId, policy)
                 didStartSdk = true
-                Log.i(TAG, "HumanSecurity.start OK (hybrid webRootDomains)")
+                Log.i(TAG, "HUMAN_APP_ID=$appId HumanSecurity.start OK (hybrid webRootDomains)")
             } catch (exception: Exception) {
                 Log.e(TAG, "HumanSecurity.start: ${exception.message}", exception)
             }
@@ -87,7 +88,7 @@ class HumanManager {
                 return
             }
             if (call.method == "humanGetHeaders") {
-                Log.i(TAG, "humanGetHeaders → BD.headersForURLRequest")
+                Log.i(TAG, "HUMAN_APP_ID=$appId humanGetHeaders → BD.headersForURLRequest")
                 try {
                     val headers = HumanSecurity.BD.headersForURLRequest(appId)
                     val map = headers as Map<*, *>

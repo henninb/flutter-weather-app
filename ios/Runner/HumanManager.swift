@@ -7,9 +7,10 @@ import os.log
 /// — start in AppDelegate, method channel `com.humansecurity/sdk`,
 /// policy `automaticInterceptorPolicy.interceptorType = .none`.
 ///
-/// **Collector / `X-PX-AUTHORIZATION: 2:…` (iOS v4):** level 2 = Collector connection error, not a scored token.
-/// Verify Safari can reach `https://collector-<APP_ID>.perimeterx.net/...`, check Xcode logs for
-/// `NSURLErrorDomain` (-1009 / -1022 ATS / -1200 SSL), `X-PX-HELLO`, VPN/proxy, and `HumanSecurity.start` on main before traffic.
+/// **Collector / `X-PX-AUTHORIZATION: 2:…` (iOS v4):** leading `2` is a status tier; the base64 payload may
+/// still decode to JSON with **h, t, u, v** (healthy token — see Flutter `HumanService` logs).
+/// If Collector is unreachable, verify Safari → `https://collector-<APP_ID>.perimeterx.net/...`, Xcode
+/// `NSURLErrorDomain` (-1009 / -1022 / -1200), `X-PX-HELLO`, VPN/proxy, and `HumanSecurity.start` on main before traffic.
 class HumanManager {
 
     static let shared = HumanManager()
@@ -97,6 +98,7 @@ class HumanManager {
             return
         }
         HumanManager.appId = appId
+        HumanManager.trace("HUMAN_APP_ID=\(appId)")
         if HumanManager.didStartSdk {
             HumanManager.trace("humanConfigure: SDK already started, appId=\(appId)")
             return
@@ -117,7 +119,7 @@ class HumanManager {
             try HumanSecurity.start(appId: HumanManager.appId, policy: policy)
             HumanManager.didStartSdk = true
             HumanSecurity.BD.delegate = BotDefenderLogger.shared
-            HumanManager.trace("HumanSecurity.start OK (main thread, hybrid webRootDomains set, BD.delegate=logger)")
+            HumanManager.trace("HUMAN_APP_ID=\(HumanManager.appId) HumanSecurity.start OK (main thread, hybrid webRootDomains, BD.delegate=logger)")
         } catch {
             HumanManager.trace("HumanSecurity.start error: \(error.localizedDescription)")
         }
@@ -155,7 +157,7 @@ class HumanManager {
             }
 
             if call.method == "humanGetHeaders" {
-                HumanManager.trace("humanGetHeaders → BD.headersForURLRequest")
+                HumanManager.trace("HUMAN_APP_ID=\(HumanManager.appId) humanGetHeaders → BD.headersForURLRequest")
                 var json: String?
                 do {
                     let headers = HumanSecurity.BD.headersForURLRequest(forAppId: HumanManager.appId)
@@ -216,7 +218,7 @@ class HumanManager {
                         let pxHeaders = HumanSecurity.BD.headersForURLRequest(forAppId: HumanManager.appId) as NSDictionary
                         if let auth = pxHeaders["X-PX-AUTHORIZATION"] as? String {
                             let levelPrefix = String(auth.prefix(while: { $0 != ":" }))
-                            HumanManager.trace("BD pre-handle: X-PX-AUTHORIZATION level prefix=\(levelPrefix) (if 2, Collector may block presenting challenge)")
+                            HumanManager.trace("BD pre-handle: X-PX-AUTHORIZATION level prefix=\(levelPrefix) (if 2, decode payload in Flutter for h/t/u/v — healthy token vs degraded)")
                         } else {
                             HumanManager.trace("BD pre-handle: X-PX-AUTHORIZATION absent")
                         }
@@ -261,7 +263,7 @@ class HumanManager {
                                 hint:
                                     "canHandle was true but handleResponse returned false — often: "
                                     + "(1) Flutter: ensure hybridAppPolicy.supportExternalWebViews is true (set in this app); "
-                                    + "(2) X-PX-AUTHORIZATION level 2 / Collector degraded; "
+                                    + "(2) X-PX-AUTHORIZATION level 2 without healthy h/t/u/v payload — Collector or degraded state; "
                                     + "(3) challenge already active. Body prefix below should match Enforcer JSON."
                             ))
                         }
