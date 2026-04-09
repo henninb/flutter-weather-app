@@ -130,9 +130,7 @@ class _CustomApiSectionState extends State<CustomApiSection> {
     final timeStr = obs['obsTimeLocal'] as String? ?? '';
     final wmoInfo = getWmoInfo(weatherCode);
 
-    final time = timeStr.isNotEmpty
-        ? '${timeStr.split('T').last}'
-        : '';
+    final time = timeStr.isNotEmpty ? timeStr.split('T').last : '';
 
     return _buildContainer(
       child: Column(

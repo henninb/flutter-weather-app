@@ -6,6 +6,6 @@ class MainApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        HumanManager.start(this)
+        HumanManager.attachApplication(this)
     }
 }

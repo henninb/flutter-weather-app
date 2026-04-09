@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/weather_screen.dart';
+import 'package:minneapolis_weather/services/human_service.dart';
+import 'screens/home_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await HumanService.ensureNativeSdkConfigured();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -15,16 +17,16 @@ void main() {
     ),
   );
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  runApp(const MinneapolisWeatherApp());
+  runApp(const WeatherApp());
 }
 
-class MinneapolisWeatherApp extends StatelessWidget {
-  const MinneapolisWeatherApp({super.key});
+class WeatherApp extends StatelessWidget {
+  const WeatherApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Minneapolis Weather',
+      title: 'Weather (HUMAN)',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: const ColorScheme.dark(
@@ -40,7 +42,7 @@ class MinneapolisWeatherApp extends StatelessWidget {
           displayColor: const Color(0xFFE8EDF2),
         ),
       ),
-      home: const WeatherScreen(),
+      home: const HomeScreen(),
     );
   }
 }

@@ -1,6 +1,9 @@
 package com.weather.minneapolis_weather
 
 import android.app.Application
+import android.util.Base64
+import android.util.Log
+import kotlin.text.Charsets
 import com.humansecurity.mobile_sdk.HumanSecurity
 import com.humansecurity.mobile_sdk.main.policy.HSPolicy
 import com.humansecurity.mobile_sdk.main.policy.HSAutomaticInterceptorType
@@ -9,45 +12,120 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 
+// Per https://docs.humansecurity.com/applications/flutter-integration
+// App id is set from Flutter `humanConfigure` — see `lib/config/human_security_app_id.dart`.
 class HumanManager {
 
     companion object {
-        private const val APP_ID = "<APPID>"
+        private const val TAG = "HumanSecurity"
 
-        fun start(application: Application) {
+        private lateinit var application: Application
+        private var appId: String = ""
+        private var didStartSdk = false
+
+        fun attachApplication(application: Application) {
+            this.application = application
+        }
+
+        private fun isConfigured(): Boolean =
+            appId.isNotEmpty() && appId != "<APPID>"
+
+        fun configureAndStart(appId: String) {
+            if (appId.isEmpty() || appId == "<APPID>") {
+                Log.i(TAG, "HumanSecurity.start skipped — invalid appId from Flutter")
+                return
+            }
+            if (!::application.isInitialized) {
+                Log.e(TAG, "HumanSecurity.start: Application not attached (MainApplication missing?)")
+                return
+            }
+            this.appId = appId
+            if (didStartSdk) {
+                Log.i(TAG, "humanConfigure: SDK already started, appId=$appId")
+                return
+            }
             try {
                 val policy = HSPolicy()
                 policy.automaticInterceptorPolicy.interceptorType = HSAutomaticInterceptorType.NONE
-                HumanSecurity.start(application, APP_ID, policy)
+                // Flutter: WebView used for challenge is external to app Kotlin — see hybrid-app-integration.
+                policy.hybridAppPolicy.supportExternalWebViews = true
+                policy.hybridAppPolicy.setWebRootDomains(
+                    setOf(".vercel.bhenning.com", ".perimeterx.net"),
+                    appId,
+                )
+                HumanSecurity.start(application, appId, policy)
+                didStartSdk = true
+                Log.i(TAG, "HumanSecurity.start OK (hybrid webRootDomains)")
             } catch (exception: Exception) {
-                println("HumanSecurity start exception: ${exception.message}")
+                Log.e(TAG, "HumanSecurity.start: ${exception.message}", exception)
             }
         }
 
         fun handleEvent(call: MethodCall, result: MethodChannel.Result) {
+            if (call.method == "humanConfigure") {
+                val id = (call.arguments as? Map<*, *>)?.get("appId") as? String
+                if (id != null) {
+                    configureAndStart(id)
+                    result.success(null)
+                } else {
+                    result.error("bad_args", "humanConfigure requires appId string", null)
+                }
+                return
+            }
+            if (!isConfigured()) {
+                when (call.method) {
+                    "humanGetHeaders" -> {
+                        Log.i(TAG, "humanGetHeaders stub (SDK not configured)")
+                        result.success("{}")
+                    }
+                    "humanHandleResponse" -> {
+                        Log.i(TAG, "humanHandleResponse stub (SDK not configured)")
+                        result.success("false")
+                    }
+                    else -> result.notImplemented()
+                }
+                return
+            }
             if (call.method == "humanGetHeaders") {
+                Log.i(TAG, "humanGetHeaders → BD.headersForURLRequest")
                 try {
-                    val headers = HumanSecurity.BD.headersForURLRequest(APP_ID)
-                    val json = JSONObject(headers as Map<*, *>)
-                    result.success(json.toString())
+                    val headers = HumanSecurity.BD.headersForURLRequest(appId)
+                    val map = headers as Map<*, *>
+                    val keys = map.keys.mapNotNull { it?.toString() }.sorted()
+                    Log.i(TAG, "humanGetHeaders: ${keys.size} key(s): ${keys.joinToString(", ")}")
+                    result.success(JSONObject(map).toString())
                 } catch (e: Exception) {
+                    Log.e(TAG, "humanGetHeaders: ${e.message}", e)
                     result.success("{}")
                 }
             } else if (call.method == "humanHandleResponse") {
                 val body = when (val args = call.arguments) {
                     is String -> args
-                    is Map<*, *> -> args["body"] as? String
+                    is Map<*, *> -> {
+                        val b64 = args["bodyBase64"] as? String
+                        if (b64 != null) {
+                            String(Base64.decode(b64, Base64.DEFAULT), Charsets.UTF_8)
+                        } else {
+                            args["body"] as? String
+                        }
+                    }
                     else -> null
                 }
                 if (body == null) {
+                    Log.i(TAG, "humanHandleResponse: no body → false")
                     result.success("false")
                     return
                 }
+                Log.i(TAG, "humanHandleResponse → BD.handleResponse (body only on Android)")
                 val handled = HumanSecurity.BD.handleResponse(body) { challengeResult: HSBotDefenderChallengeResult ->
-                    result.success(if (challengeResult == HSBotDefenderChallengeResult.SOLVED) "solved" else "cancelled")
+                    val out =
+                        if (challengeResult == HSBotDefenderChallengeResult.SOLVED) "solved" else "cancelled"
+                    Log.i(TAG, "humanHandleResponse result: $out")
+                    result.success(out)
                     null
                 }
                 if (!handled) {
+                    Log.i(TAG, "humanHandleResponse → false (not handled)")
                     result.success("false")
                 }
             } else {

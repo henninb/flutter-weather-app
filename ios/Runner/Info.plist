@@ -45,5 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Allow HTTPS to Human / PerimeterX Collector (*.perimeterx.net). If you still see X-PX-AUTHORIZATION 2:… check Console for NSURLErrorDomain -1022 (ATS) or -1200 (SSL). -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>perimeterx.net</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>
