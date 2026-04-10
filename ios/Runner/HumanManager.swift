@@ -92,7 +92,7 @@ class HumanManager {
     }
 
     /// Called from the method channel on the main queue with the app id from `lib/config/human_security_app_id.dart`.
-    func configureAndStart(appId: String) {
+    func configureAndStart(appId: String, customParam1: String) {
         guard !appId.isEmpty && appId != "<APPID>" else {
             HumanManager.trace("HumanSecurity.start skipped — invalid appId from Flutter")
             return
@@ -120,6 +120,15 @@ class HumanManager {
             HumanManager.didStartSdk = true
             HumanSecurity.BD.delegate = BotDefenderLogger.shared
             HumanManager.trace("HUMAN_APP_ID=\(HumanManager.appId) HumanSecurity.start OK (main thread, hybrid webRootDomains, BD.delegate=logger)")
+            do {
+                try HumanSecurity.BD.setCustomParameters(
+                    parameters: ["custom_param1": customParam1],
+                    forAppId: HumanManager.appId
+                )
+                HumanManager.trace("BD.setCustomParameters custom_param1=\(customParam1)")
+            } catch {
+                HumanManager.trace("BD.setCustomParameters error: \(error.localizedDescription)")
+            }
         } catch {
             HumanManager.trace("HumanSecurity.start error: \(error.localizedDescription)")
         }
@@ -134,8 +143,11 @@ class HumanManager {
             if call.method == "humanConfigure" {
                 if let args = call.arguments as? [String: Any],
                    let id = args["appId"] as? String {
+                    let raw = args["customParam1"] as? String
+                    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let customParam1 = trimmed.isEmpty ? "flutter-weather-app" : trimmed
                     DispatchQueue.main.async {
-                        HumanManager.shared.configureAndStart(appId: id)
+                        HumanManager.shared.configureAndStart(appId: id, customParam1: customParam1)
                         result(nil)
                     }
                 } else {

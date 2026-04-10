@@ -6,6 +6,7 @@ import 'screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Fail fast: [HumanService.ensureNativeSdkConfigured] rethrows if native `humanConfigure` fails.
   await HumanService.ensureNativeSdkConfigured();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

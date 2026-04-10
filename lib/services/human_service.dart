@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/human_custom_param1.dart';
 import '../config/human_security_app_id.dart';
 
+export '../config/human_custom_param1.dart' show kHumanCustomParam1;
 export '../config/human_security_app_id.dart' show kHumanSecurityAppId;
 
 /// Human Security Bot Defender bridge per
@@ -20,6 +22,9 @@ class HumanService {
 
   static bool _nativeConfigureSucceeded = false;
 
+  /// Same string sent to native as `custom_param1` ([kHumanCustomParam1]).
+  static Future<String> getAppLabelForCustomParam1() async => kHumanCustomParam1;
+
   /// Calls native `HumanSecurity.start` with [kHumanSecurityAppId]. Invoke once from `main()` before [runApp].
   ///
   /// **Collector logging:** the SDK does not expose raw HTTPS to the app. On **iOS**, Xcode shows
@@ -32,7 +37,10 @@ class HumanService {
     try {
       await _channel.invokeMethod<void>(
         'humanConfigure',
-        <String, dynamic>{'appId': kHumanSecurityAppId},
+        <String, dynamic>{
+          'appId': kHumanSecurityAppId,
+          'customParam1': kHumanCustomParam1,
+        },
       );
       _nativeConfigureSucceeded = true;
       _logHumanAppId('native SDK configured');
@@ -62,6 +70,16 @@ class HumanService {
   static String? pxAuthorizationValue(Map<String, String> headers) {
     for (final e in headers.entries) {
       if (e.key.toLowerCase() == 'x-px-authorization') {
+        return e.value;
+      }
+    }
+    return null;
+  }
+
+  /// Value of `X-PX-HELLO` from [headers], or null if missing (case-insensitive key).
+  static String? pxHelloValue(Map<String, String> headers) {
+    for (final e in headers.entries) {
+      if (e.key.toLowerCase() == 'x-px-hello') {
         return e.value;
       }
     }

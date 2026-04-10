@@ -1,11 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minneapolis_weather/main.dart';
+import 'package:minneapolis_weather/services/human_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
+  setUp(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.humansecurity/sdk'),
@@ -22,6 +23,8 @@ void main() {
         }
       },
     );
+    // Mirrors [main]: native HUMAN must configure before the UI tree runs.
+    await HumanService.ensureNativeSdkConfigured();
   });
 
   testWidgets('App renders without crashing', (WidgetTester tester) async {

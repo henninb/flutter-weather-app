@@ -30,7 +30,7 @@ class HumanManager {
         private fun isConfigured(): Boolean =
             appId.isNotEmpty() && appId != "<APPID>"
 
-        fun configureAndStart(appId: String) {
+        fun configureAndStart(appId: String, customParam1: String) {
             if (appId.isEmpty() || appId == "<APPID>") {
                 Log.i(TAG, "HumanSecurity.start skipped — invalid appId from Flutter")
                 return
@@ -57,6 +57,13 @@ class HumanManager {
                 HumanSecurity.start(application, appId, policy)
                 didStartSdk = true
                 Log.i(TAG, "HUMAN_APP_ID=$appId HumanSecurity.start OK (hybrid webRootDomains)")
+                val customParameters = hashMapOf("custom_param1" to customParam1)
+                try {
+                    HumanSecurity.BD.setCustomParameters(customParameters, appId)
+                    Log.i(TAG, "BD.setCustomParameters custom_param1=$customParam1")
+                } catch (e: Exception) {
+                    Log.e(TAG, "BD.setCustomParameters: ${e.message}", e)
+                }
             } catch (exception: Exception) {
                 Log.e(TAG, "HumanSecurity.start: ${exception.message}", exception)
             }
@@ -64,9 +71,14 @@ class HumanManager {
 
         fun handleEvent(call: MethodCall, result: MethodChannel.Result) {
             if (call.method == "humanConfigure") {
-                val id = (call.arguments as? Map<*, *>)?.get("appId") as? String
+                val args = call.arguments as? Map<*, *>
+                val id = args?.get("appId") as? String
                 if (id != null) {
-                    configureAndStart(id)
+                    val raw = args["customParam1"] as? String
+                    val trimmed = raw?.trim().orEmpty()
+                    val customParam1 =
+                        if (trimmed.isEmpty()) "flutter-weather-app" else trimmed
+                    configureAndStart(id, customParam1)
                     result.success(null)
                 } else {
                     result.error("bad_args", "humanConfigure requires appId string", null)

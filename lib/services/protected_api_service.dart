@@ -84,6 +84,87 @@ class ProtectedApiService {
     return _decodeJsonBody(response.body);
   }
 
+  /// Best-effort public egress IPv4/IPv6 via HTTPS (api.ipify.org). Used when the API body does not echo client IP.
+  static Future<String> fetchPublicIp() async {
+    final uri = Uri.parse('https://api.ipify.org?format=json');
+    late final http.Response response;
+    try {
+      response = await http.get(uri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception('IP lookup timed out'),
+      );
+    } on SocketException catch (e) {
+      throw Exception('Network error (ipify): ${e.message}');
+    } on http.ClientException catch (e) {
+      throw Exception('IP lookup failed: ${e.message}');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('IP lookup HTTP ${response.statusCode}');
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException catch (e) {
+      throw Exception('IP lookup response is not JSON: ${e.message}');
+    }
+    if (decoded is! Map) {
+      throw Exception('IP lookup response has unexpected shape');
+    }
+    final map = Map<String, dynamic>.from(decoded);
+    final ip = map['ip'] as String?;
+    if (ip == null || ip.isEmpty) {
+      throw Exception('IP lookup returned empty ip');
+    }
+    return ip;
+  }
+
+  /// Extracts a client IP string if the backend includes it in JSON (common key names / shallow nesting).
+  static String? reportedClientIpFromJson(Map<String, dynamic> data, [int depth = 0]) {
+    if (depth > 4) {
+      return null;
+    }
+    const directKeys = [
+      'clientIp',
+      'client_ip',
+      'clientIP',
+      'reportedIp',
+      'reported_ip',
+      'remoteIp',
+      'remote_addr',
+      'ip',
+    ];
+    for (final k in directKeys) {
+      final v = data[k];
+      if (v is String && v.trim().isNotEmpty) {
+        return v.trim();
+      }
+    }
+    const forwardedKeys = ['xForwardedFor', 'x-forwarded-for', 'X-Forwarded-For'];
+    for (final k in forwardedKeys) {
+      final v = data[k];
+      if (v is String && v.trim().isNotEmpty) {
+        return v.split(',').first.trim();
+      }
+    }
+    for (final value in data.values) {
+      if (value is Map<String, dynamic>) {
+        final found = reportedClientIpFromJson(value, depth + 1);
+        if (found != null) {
+          return found;
+        }
+      } else if (value is Map) {
+        final found = reportedClientIpFromJson(
+          Map<String, dynamic>.from(value),
+          depth + 1,
+        );
+        if (found != null) {
+          return found;
+        }
+      }
+    }
+    return null;
+  }
+
   static Map<String, dynamic> _decodeJsonBody(String body) {
     final Object? decoded;
     try {
