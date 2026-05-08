@@ -13,42 +13,29 @@ import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 
 // Per https://docs.humansecurity.com/applications/flutter-integration
-// App id is set from Flutter `humanConfigure` — see `lib/config/human_security_app_id.dart`.
+// SDK must start in Application.onCreate() so the collector has time to produce a level-2 token.
 class HumanManager {
 
     companion object {
         private const val TAG = "HumanSecurity"
+        private const val DEFAULT_APP_ID = "PXWzXYgxST"
 
-        private lateinit var application: Application
-        private var appId: String = ""
+        private var appId: String = DEFAULT_APP_ID
         private var didStartSdk = false
 
-        fun attachApplication(application: Application) {
-            this.application = application
-        }
-
-        private fun isConfigured(): Boolean =
-            appId.isNotEmpty() && appId != "<APPID>"
-
-        fun configureAndStart(appId: String, customParam1: String) {
-            if (appId.isEmpty() || appId == "<APPID>") {
-                Log.i(TAG, "HumanSecurity.start skipped — invalid appId from Flutter")
-                return
-            }
-            if (!::application.isInitialized) {
-                Log.e(TAG, "HumanSecurity.start: Application not attached (MainApplication missing?)")
-                return
-            }
-            this.appId = appId
-            Log.i(TAG, "HUMAN_APP_ID=$appId")
+        /**
+         * Call from [MainApplication.onCreate]. Starts [HumanSecurity] immediately so the
+         * collector can work while the Flutter engine boots — this is what produces a level-2
+         * `X-PX-AUTHORIZATION` token instead of a level-1 stub.
+         */
+        fun start(application: Application) {
             if (didStartSdk) {
-                Log.i(TAG, "humanConfigure: SDK already started, appId=$appId")
+                Log.i(TAG, "HumanSecurity.start already called, skipping")
                 return
             }
             try {
                 val policy = HSPolicy()
                 policy.automaticInterceptorPolicy.interceptorType = HSAutomaticInterceptorType.NONE
-                // Flutter: WebView used for challenge is external to app Kotlin — see hybrid-app-integration.
                 policy.hybridAppPolicy.supportExternalWebViews = true
                 policy.hybridAppPolicy.setWebRootDomains(
                     setOf(".vercel.bhenning.com", ".perimeterx.net"),
@@ -56,16 +43,32 @@ class HumanManager {
                 )
                 HumanSecurity.start(application, appId, policy)
                 didStartSdk = true
-                Log.i(TAG, "HUMAN_APP_ID=$appId HumanSecurity.start OK (hybrid webRootDomains)")
-                val customParameters = hashMapOf("custom_param1" to customParam1)
-                try {
-                    HumanSecurity.BD.setCustomParameters(customParameters, appId)
-                    Log.i(TAG, "BD.setCustomParameters custom_param1=$customParam1")
-                } catch (e: Exception) {
-                    Log.e(TAG, "BD.setCustomParameters: ${e.message}", e)
-                }
+                Log.i(TAG, "HUMAN_APP_ID=$appId HumanSecurity.start OK from Application.onCreate")
             } catch (exception: Exception) {
                 Log.e(TAG, "HumanSecurity.start: ${exception.message}", exception)
+            }
+        }
+
+        private fun isConfigured(): Boolean =
+            appId.isNotEmpty() && appId != "<APPID>"
+
+        /**
+         * Called from Flutter via method channel. If the SDK was already started in
+         * [Application.onCreate], this only updates custom parameters.
+         */
+        fun configureAndStart(appId: String, customParam1: String) {
+            if (appId.isEmpty() || appId == "<APPID>") {
+                Log.i(TAG, "humanConfigure skipped — invalid appId from Flutter")
+                return
+            }
+            this.appId = appId
+            Log.i(TAG, "humanConfigure: HUMAN_APP_ID=$appId, didStartSdk=$didStartSdk")
+            val customParameters = hashMapOf("custom_param1" to customParam1)
+            try {
+                HumanSecurity.BD.setCustomParameters(customParameters, appId)
+                Log.i(TAG, "BD.setCustomParameters custom_param1=$customParam1")
+            } catch (e: Exception) {
+                Log.e(TAG, "BD.setCustomParameters: ${e.message}", e)
             }
         }
 
